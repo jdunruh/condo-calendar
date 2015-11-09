@@ -28,3 +28,10 @@
 .month-header {
     text-align: center;
 }
+
+.change-month {
+    background-color: transparent;
+    border: none;
+    padding-left: 3px;
+    padding-right: 3px;
+}

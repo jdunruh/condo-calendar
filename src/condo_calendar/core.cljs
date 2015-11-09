@@ -158,7 +158,10 @@
        (render [this]
                (println "rendering month header" (om/props this))
                (let [month-id (om/props this)]
-                 (dom/div #js {:className "month-header"} (cf/unparse (cf/formatter "MMMM YYYY") (t/date-time month-id))))))
+                 (dom/div #js {:className "month-header"}
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-left"}))
+                          (cf/unparse (cf/formatter "MMMM YYYY") (t/date-time month-id))
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-right"}))))))
 
 (def month-header (om/factory Month-header))
 
