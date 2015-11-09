@@ -83,8 +83,7 @@
 (def init-data {:people [{:color 'red' :name "Judy" :id 1}
                          {:color 'blue' :name "John" :id 2}
                          {:color 'green' :name "Jake" :id 3}
-                         {:color 'yellow' :name "Susan" :id 4}
-                         {:color 'none' :name "default" :id 0}]
+                         {:color 'yellow' :name "Susan" :id 4}]
                 :month-id (t/date-time 2015 11 1)
                 :month (six-weeks-containing-month 2015 11)
                 :days []})
@@ -103,7 +102,7 @@
   [{:keys [state selector] :as env} key ]
   (println "read day" selector key)
   (let [st @state]
-    {:value (get-in st [:days selector] {:name "available" :color 'none'})}))
+    {:value (get-in st [:days selector] {:name "available" :color 'white'})}))
 
 (defmethod read :month/weeks
   [{:keys [state selector] :as env} key ]
