@@ -134,7 +134,7 @@
        (render [this]
                (println "rendering day " (om/props this))
                (let [day (:date (om/props this))]
-                 (apply dom/div #js{:className 'day'}
+                 (apply dom/div #js{:className "day"}
                         [(dom/div #js {:className "day-no"} (t/day day))
                          (dom/div #js {:className "name"} (get (om/props this) :name ""
                                                                ))]))))
