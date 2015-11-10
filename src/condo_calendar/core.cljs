@@ -112,13 +112,14 @@
 
 (defmulti mutate om/dispatch)
 
-(defmethod mutate 'points/increment
-  [{:keys [state]} _ {:keys [date owner]}]
-  {:action
-   (fn []
-     (swap! state assoc-in
-            [:days (date-key date)]
-            owner))})
+(defmethod mutate 'day/assign
+  [{:keys [state]} _ {:keys [owner date] :as params}]
+  {:value {:day/day-id [:name]}
+   :action
+          (fn []
+            (swap! state assoc-in
+                   (:days [:days date])
+                   owner))})
 
 
 (defui Day
@@ -128,7 +129,7 @@
               [:day/day-id date-key])
        static om/IQuery
        (query [this]
-              '[:name :color])
+              '[:day/day-id name color])
        Object
        (render [this]
                (println "rendering day " (om/props this))
@@ -167,7 +168,7 @@
 (defui Month
        static om/IQuery
        (query [this]
-              [:month/weeks {:month/month-id (om/get-query Month-header)} {:day/day-id (om/get-query Day)}])
+              [:month/weeks {:month/month-id (om/get-query Month-header)} (om/get-query Day)])
        Object
        (render [this]
                (dom/div #js {:className "month"}
