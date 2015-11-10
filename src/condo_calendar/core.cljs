@@ -171,9 +171,9 @@
               [:month/weeks {:month/month-id (om/get-query Month-header)} (om/get-query Day)])
        Object
        (render [this]
-               (dom/div #js {:className "month"}
-                      (month-header (:month/month-id (om/props this)))
-                      (map week (:month/weeks (om/props this))))))
+               (apply dom/div #js {:className "month"}
+                        [(month-header (:month/month-id (om/props this)))
+                         (map week (:month/weeks (om/props this)))])))
 
 (def reconciler
   (om/reconciler
