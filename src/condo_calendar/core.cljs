@@ -90,7 +90,7 @@
                            {:color 'yellow' :name "Susan" :id 4}]
                 :month-id (t/date-time 2015 11 1)
                 :month    (six-weeks-containing-month 2015 11)
-                :days     []})
+                :days/by-date     {}})
 
 (defmulti read om/dispatch)
 
@@ -124,21 +124,23 @@
     {:value (get-in st [:month])}))
 
 (defn add-assignment-to-calendar [state date assignee]
-  (update state :days/by-date assoc date {:days/by-date date :person/by-id (:id assignee)}))
+  (println "adding " assignee " to " date)
+  (update state :days/by-date assoc date {:days/by-date date :person/by-id assignee}))
 
 
 (defn remove-date-from-days [days date]
-  (remove #(= (:date-key %) date) days))
+  (println "in remove " days date)
+  (dissoc days date))
 
-(defn release-day [state date assignee]
-  (update state :days remove-date-from-days date))
+(defn release-day [state date]
+  (update state :days/by-date remove-date-from-days date))
 
 (defmulti mutate om/dispatch)
 
 (defmethod mutate 'day/assign
   [{:keys [state]} _ {:keys [assignee date] :as params}]
   (if (not-any? #(= date (:day/by-date %)) (:days @state))
-    {:value {:day/by-date [:name]}
+    {:value {:days/by-date [date]}
      :action
             (fn []
               (swap! state add-assignment-to-calendar date assignee))}
@@ -146,12 +148,13 @@
 
 (defmethod mutate 'day/release
   [{:keys [state]} _ {:keys [assignee date] :as params}]
-  (if-let [day (get @state :day/by-date date)]
-    (if (= (:assignee day) assignee)
+  (println "releasing " date " requested by " assignee)
+  (if-let [day (get-in @state [:days/by-date date])]
+    (if (= (:person/by-id day) assignee)
       {:value {:day/by-date [:name]}
        :action
               (fn []
-                (swap! state release-day date assignee))}
+                (swap! state release-day date))}
       {:value {:error "Cannot release this day - it is assigned to someone else"}})
     {:value {:error "Cananot release this day - it is not assigned"}}))
 
