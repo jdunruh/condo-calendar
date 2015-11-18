@@ -1,0 +1,37 @@
+.week {
+    width: 95%;
+    margin: 0 auto;
+    clear: both;
+}
+
+.day {
+    width: 14%;
+    height: 14vw;
+    display: inline-block;
+    border: solid black 1px;
+    position: relative;
+    float: left;
+}
+
+.day-no {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+}
+
+.name {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+}
+
+.month-header {
+    text-align: center;
+}
+
+.change-month {
+    background-color: transparent;
+    border: none;
+    padding-left: 3px;
+    padding-right: 3px;
+}
