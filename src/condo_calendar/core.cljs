@@ -9,7 +9,7 @@
             [om.dom :as dom]
             [goog.dom :as gdom]))
 
-  (enable-console-print!)
+(enable-console-print!)
 
 
 
@@ -72,7 +72,7 @@
   (cf/unparse (cf/formatters :basic-date) day))
 
 (defn seq-of-days [year month]
-  (map #(hash-map :date % :date-key (date-key %))
+  (map #(hash-map :date % :day/by-date (date-key %))
        (p/periodic-seq (sunday-of-first-week-of-month year month) (t/days 1))))
 
 (defn six-weeks-containing-month [year month]
@@ -81,17 +81,16 @@
   (take 6 (partition 7 (seq-of-days year month))))
 
 (defn assign-person-to-day [state day person]
-  "assign a person to a day by putting an entry into the days array in he app state"
-  )
+  "assign a person to a day by putting an entry into the days hash in the app state"
+  (update state :days/by-date assoc day {:day/by-date day :person/by-id person}))
 
-(def init-data {:people [{:color 'red' :name "Judy" :id 1}
-                         {:color 'blue' :name "John" :id 2}
-                         {:color 'green' :name "Jake" :id 3}
-                         {:color 'yellow' :name "Susan" :id 4}]
+(def init-data {:people   [{:color 'red' :name "Judy" :id 1}
+                           {:color 'blue' :name "John" :id 2}
+                           {:color 'green' :name "Jake" :id 3}
+                           {:color 'yellow' :name "Susan" :id 4}]
                 :month-id (t/date-time 2015 11 1)
-                :month (six-weeks-containing-month 2015 11)
-                :days []})
-
+                :month    (six-weeks-containing-month 2015 11)
+                :days     []})
 
 (defmulti read om/dispatch)
 
@@ -103,22 +102,30 @@
     {:value (:month-id st)}))
 
 (defmethod read :day/day-id
-  [{:keys [state selector] :as env} key ]
+  [{:keys [state selector] :as env} key]
   (println "read day" selector key)
   (let [st @state]
-    (if-let [assignment (first (filter  #(= (:date-key %) selector) (:days st)))]
+    (if-let [assignment (get-in st [:days/by-date selector])]
       {:value assignment}
       {:value {:name "available" :color 'white'}})))
 
+(defmethod read :person/by-id
+  [{:keys [state selector] :as env}] key [:keys selector]
+  (println "read person " selector)
+  (let [st @state]
+    (if-let [person (get-in st [:person/by-id selector])]
+      {:value (assoc person :date selector)}
+      {:value {:name "available" :color "white" :date selector}})))
 
 (defmethod read :month/weeks
-  [{:keys [state selector] :as env} key ]
+  [{:keys [state selector] :as env} key]
   (println "read month" selector key)
   (let [st @state]
     {:value (get-in st [:month])}))
 
 (defn add-assignment-to-calendar [state date assignee]
-    (assoc state :days (conj (:days state) {:date-key date :assignee/id (:id assignee)})))
+  (update state :days/by-date assoc date {:days/by-date date :person/by-id (:id assignee)}))
+
 
 (defn remove-date-from-days [days date]
   (remove #(= (:date-key %) date) days))
@@ -130,63 +137,115 @@
 
 (defmethod mutate 'day/assign
   [{:keys [state]} _ {:keys [assignee date] :as params}]
-  (if (nat-any? #(= date (:date-key %)))
-    {:value {:day/day-id [:name]}
+  (if (not-any? #(= date (:day/by-date %)) (:days @state))
+    {:value {:day/by-date [:name]}
      :action
             (fn []
               (swap! state add-assignment-to-calendar date assignee))}
     {:value {:error (str "Attempt to assign a day that is already assigned " date)}}))
 
 (defmethod mutate 'day/release
-  [{:keys [state]} _ {:keys [asignee date] :as params}]
-  {:value {:day/day-id [:name]}
-   :action
-          (fn []
-            (swap! state release-day date asignee))})
+  [{:keys [state]} _ {:keys [assignee date] :as params}]
+  (if-let [day (get @state :day/by-date date)]
+    (if (= (:assignee day) assignee)
+      {:value {:day/by-date [:name]}
+       :action
+              (fn []
+                (swap! state release-day date assignee))}
+      {:value {:error "Cannot release this day - it is assigned to someone else"}})
+    {:value {:error "Cananot release this day - it is not assigned"}}))
+
+(defui Person
+       static om/Ident
+       (ident [this {:keys [person-id]}]
+              [:person/by-id person-id])
+       static om/IQuery
+       (query [this]
+              '[:color :name])
+       Object
+       (render [this]
+               (let [name (get (om/props this) :name "")
+                     color (get (om/props this) :color "transparent")]
+                 (dom/div #js {:className (str "name " + color)} name))))
+
+(def person (om/factory Person))
 
 
 (defui Day
        static om/Ident
-       (ident [this {:keys [date-key]}]
+       (ident [this {:keys [day/day-id]}]
               (println "Day Ident " date-key this)
-              [:day/day-id date-key])
+              [:day/by-date date-key])
        static om/IQuery
        (query [this]
-              '[:day/day-id name color]))
+              '[:day/day-id :date])
+       Object
+       (render [this]
+               (println "rendering day " (om/props this))
+               (let [day (:date (om/props this))
+                     day-id (:day/day-id (om/props this))]
+                 (dom/div #js{:className "day"}
+                          (dom/div #js {:className "day-no"} (t/day day))
+                          (person day-id)
+                          ))))
 
-(def day (om/factory Day {:keyfn :date-key}))
+(def day (om/factory Day {:keyfn :day/by-date}))
 
-(defui Week)
+(defui Week
+       Object
+       (render [this]
+               (println "rendering week " (om/props this))
+               (apply dom/div #js {:className "week"}
+                      (map day (om/props this)))))
 
-(def week (om/factory Week {:keyfn #(:date-key (first %))}))
+(def week (om/factory Week {:keyfn #(:day/by-date (first %))}))
 
 (defui Month-header
        static om/IQuery
        (query [this]
-              '[:month/month-id]))
+              '[:month/month-id])
+       Object
+       (render [this]
+               (println "rendering month header" (om/props this))
+               (let [month-id (om/props this)]
+                 (dom/div #js {:className "month-header"}
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-left"}))
+                          (cf/unparse (cf/formatter "MMMM YYYY") (t/date-time month-id))
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-right"}))))))
+
 
 (def month-header (om/factory Month-header))
 
 (defui Month-body
-       static om/Ident
-       (ident [this {:keys [:month/weeks]}]
-              (str "month" (:date-key (first :month/weeks))))
        static om/IQuery
        (query [this]
-              '[:month/weeks]))
+              '[:month/weeks])
+       Object
+       (render [this]
+               (println "rendering body " (:month/weeks (om/props this)))
+               (apply dom/div #js {:className "month-body"}
+                      (map week (:month/weeks (om/props this))))))
 
-(def month-body (om/factory Month-body))
+
+       (def month-body (om/factory Month-body))
 
 (defui Month
        static om/IQuery
        (query [this]
-              [(om/get-query Month-body)  (om/get-query Month-header) (om/get-query Day)])
-                        )
+             [:month/weeks (om/get-query Month-header) (om/get-query Day)])
+       Object
+       (render [this]
+               (println "rendering month " (keys (om/props this)))
+               (println (:months/weeks (om/props this)))
+               (println (om/props this))
+               (dom/div #js {:className "month"}
+                        (month-header (:month/month-id this))
+                        (month-body (om/props this)))))
 
 (def reconciler
   (om/reconciler
     {:state  (atom init-data)
      :parser (om/parser {:read read :mutate mutate})}))
 
-;(om/add-root! reconciler
- ;             Month (gdom/getElement "app"))
+(om/add-root! reconciler
+             Month (gdom/getElement "app"))
