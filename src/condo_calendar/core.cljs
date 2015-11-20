@@ -16,7 +16,8 @@
 
 
 
-;; explore the alternative of generativg the months on the fly
+;; Here are the 7 possible month layouts - based on a 31 day month. Just stop at
+;; 28, 29, or 30 for shorter months. All months can fit into 6 weeks
 ;
 ;  1  2   3   4   5   6   7
 ;  8  9  10  11  12  13  14
@@ -72,7 +73,7 @@
   (cf/unparse (cf/formatters :basic-date) day))
 
 (defn seq-of-days [year month]
-  (map #(hash-map :date % :day/by-date (date-key %))
+  (map #(hash-map :date % :days/by-date (date-key %))
        (p/periodic-seq (sunday-of-first-week-of-month year month) (t/days 1))))
 
 (defn six-weeks-containing-month [year month]
@@ -84,13 +85,24 @@
   "assign a person to a day by putting an entry into the days hash in the app state"
   (update state :days/by-date assoc day {:day/by-date day :person/by-id person}))
 
-(def init-data {:people   [{:color 'red' :name "Judy" :id 1}
-                           {:color 'blue' :name "John" :id 2}
-                           {:color 'green' :name "Jake" :id 3}
-                           {:color 'yellow' :name "Susan" :id 4}]
-                :month-id (t/date-time 2015 11 1)
-                :month    (six-weeks-containing-month 2015 11)
-                :days/by-date     {}})
+(def init-data {:person/by-id {0 {:color 'red' :name "Judy" :id 0}
+                               1 {:color 'blue' :name "John" :id 1}
+                               2 {:color 'green' :name "Jake" :id 2}
+                               3 {:color 'yellow' :name "Susan" :id 3}}
+                 :user 1
+                 :month-id (t/date-time 2015 11 1)
+                 :month (six-weeks-containing-month 2015 11)
+                 :days/by-date {}})
+
+(defn date-to-assignment [state date]
+  (get-in state (get-in state [:days/by-date date] [nil]) {:name "available" :color "white"}))
+
+(defn denormalize-week [state week]
+  (map #(merge % (date-to-assignment state (:days/by-date %))) week))
+
+
+(defn denormalize-month [state]
+  (map #(denormalize-week state %) (:month state)))
 
 (defmulti read om/dispatch)
 
@@ -121,11 +133,12 @@
   [{:keys [state selector] :as env} key]
   (println "read month" selector key)
   (let [st @state]
-    {:value (get-in st [:month])}))
+    {:value (denormalize-month st)}))
+
 
 (defn add-assignment-to-calendar [state date assignee]
   (println "adding " assignee " to " date)
-  (update state :days/by-date assoc date {:days/by-date date :person/by-id assignee}))
+  (update state :days/by-date assoc date [:person/by-id assignee]))
 
 
 (defn remove-date-from-days [days date]
@@ -158,20 +171,7 @@
       {:value {:error "Cannot release this day - it is assigned to someone else"}})
     {:value {:error "Cananot release this day - it is not assigned"}}))
 
-(defui Person
-       static om/Ident
-       (ident [this {:keys [person-id]}]
-              [:person/by-id person-id])
-       static om/IQuery
-       (query [this]
-              '[:color :name])
-       Object
-       (render [this]
-               (let [name (get (om/props this) :name "")
-                     color (get (om/props this) :color "transparent")]
-                 (dom/div #js {:className (str "name " + color)} name))))
 
-(def person (om/factory Person))
 
 
 (defui Day
@@ -186,13 +186,14 @@
        (render [this]
                (println "rendering day " (om/props this))
                (let [day (:date (om/props this))
-                     day-id (:day/day-id (om/props this))]
-                 (dom/div #js{:className "day"}
+                     color (:color (om/props this))
+                     name (:name (om/props this))]
+                 (dom/div #js{:className (str "day " color)}
                           (dom/div #js {:className "day-no"} (t/day day))
-                          (person day-id)
+                          (dom/span #js {:className "day-name"} name)
                           ))))
 
-(def day (om/factory Day {:keyfn :day/by-date}))
+(def day (om/factory Day {:keyfn :days/by-date}))
 
 (defui Week
        Object
@@ -201,7 +202,7 @@
                (apply dom/div #js {:className "week"}
                       (map day (om/props this)))))
 
-(def week (om/factory Week {:keyfn #(:day/by-date (first %))}))
+(def week (om/factory Week {:keyfn #(:days/by-date (first %))}))
 
 (defui Month-header
        static om/IQuery
