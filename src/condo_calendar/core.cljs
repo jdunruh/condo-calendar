@@ -81,18 +81,18 @@
   of the month and continuing for six weeks."
   (take 6 (partition 7 (seq-of-days year month))))
 
-(defn assign-person-to-day [state day person]
-  "assign a person to a day by putting an entry into the days hash in the app state"
-  (update state :days/by-date assoc day {:day/by-date day :person/by-id person}))
-
-(def init-data {:person/by-id {0 {:color 'red' :name "Judy" :id 0}
-                               1 {:color 'blue' :name "John" :id 1}
-                               2 {:color 'green' :name "Jake" :id 2}
-                               3 {:color 'yellow' :name "Susan" :id 3}}
+(def init-data
+  (let [today (t/today)
+        month (t/month today)
+        year  (t/year today)]
+                {:person/by-id {0 {:color  "red" :name "Judy" :id 0}
+                               1 {:color "blue" :name "John" :id 1}
+                               2 {:color "green" :name "Jake" :id 2}
+                               3 {:color "yellow" :name "Susan" :id 3}}
                  :user 1
-                 :month-id (t/date-time 2015 11 1)
-                 :month (six-weeks-containing-month 2015 11)
-                 :days/by-date {}})
+                 :month-id (t/date-time year month 1)
+                 :month (six-weeks-containing-month year month)
+                 :days/by-date {}}))
 
 (defn date-to-assignment [state date]
   (get-in state (get-in state [:days/by-date date] [nil]) {:name "available" :color "white"}))
@@ -148,6 +148,15 @@
 (defn release-day [state date]
   (update state :days/by-date remove-date-from-days date))
 
+(defn next-month [current-month-start]
+  "given a date-time, generate the date-time one month later"
+  (t/plus current-month-start (t/months 1)))
+
+(defn last-month [current-month-start]
+  "given a date-time, generate the date-time one month earlier"
+  (t/minus current-month-start (t/months 1)))
+
+
 (defmulti mutate om/dispatch)
 
 (defmethod mutate 'day/assign
@@ -156,7 +165,7 @@
     {:value {:days/by-date [date]}
      :action
             (fn []
-              (swap! state add-assignment-to-calendar date assignee))}
+              (swap! state add-assignment-to-calendar (str date) assignee))}
     {:value {:error (str "Attempt to assign a day that is already assigned " date)}}))
 
 (defmethod mutate 'day/release
@@ -167,12 +176,29 @@
       {:value {:day/by-date [:name]}
        :action
               (fn []
-                (swap! state release-day date))}
+                (swap! state release-day (str date)))}
       {:value {:error "Cannot release this day - it is assigned to someone else"}})
     {:value {:error "Cananot release this day - it is not assigned"}}))
 
+(defmethod mutate 'month/next
+  [[{:keys [state]}] _ _]
+  (let [st @state
+        new-month (next-month (:month-id st))
+        month (t/month new-month)
+        year  (t/year new-month)]
+    {:value  {:month/month-id (date-key new-month)}
+     :action (fn []
+               (swap! state (assoc :month-id new-month :month (six-weeks-containing-month year month))))}))
 
-
+(defmethod mutate 'month/previous
+  [{:keys [state]} _ _]
+  (let [st @state
+        new-month (last-month (:month-id st))
+        month (t/month new-month)
+        year  (t/year new-month)]
+    {:value  {:month/month-id (date-key new-month)}
+     :action (fn []
+               (swap! state (assoc :month-id new-month :month (six-weeks-containing-month year month))))}))
 
 (defui Day
        static om/Ident
@@ -213,9 +239,9 @@
                (println "rendering month header" (om/props this))
                (let [month-id (om/props this)]
                  (dom/div #js {:className "month-header"}
-                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-left"}))
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-left fa-2x"}))
                           (cf/unparse (cf/formatter "MMMM YYYY") (t/date-time month-id))
-                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-right"}))))))
+                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-right fa-2x"}))))))
 
 
 (def month-header (om/factory Month-header))
