@@ -201,7 +201,7 @@
         year  (t/year new-month)]
     {:value  {:month/month-id (date-key new-month)}
      :action (fn []
-               (swap! state (assoc :month/month-id new-month :month (six-weeks-containing-month year month))))}))
+               (swap! state assoc :month/month-id new-month :month (six-weeks-containing-month year month)))}))
 
 ;(defn assign-day [assignee date]
 ;  "assign a day to a user"
