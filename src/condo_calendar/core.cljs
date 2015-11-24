@@ -90,9 +90,10 @@
                                2 {:color "green" :name "Jake" :id 2}
                                3 {:color "yellow" :name "Susan" :id 3}}
                  :user 1
-                 :month-id (t/date-time year month 1)
+                 :month/month-id (t/date-time year month 1)
                  :month (six-weeks-containing-month year month)
-                 :days/by-date {}}))
+                 :days/by-date {}
+                 :current-user [:person/by-id 2]}))
 
 (defn date-to-assignment [state date]
   (get-in state (get-in state [:days/by-date date] [nil]) {:name "available" :color "white"}))
@@ -110,8 +111,8 @@
   [{:keys [state selector] :as env} key {:keys [month]}]
   (println "reading month ID" selector month)
   (let [st @state]
-    (println "Month Id " (:month-id st))
-    {:value (:month-id st)}))
+    (println "Month Id " (:month/month-id st))
+    {:value (:month/month-id st)}))
 
 (defmethod read :day/day-id
   [{:keys [state selector] :as env} key]
@@ -146,6 +147,7 @@
   (dissoc days date))
 
 (defn release-day [state date]
+  (println "release-day " state date)
   (update state :days/by-date remove-date-from-days date))
 
 (defn next-month [current-month-start]
@@ -162,7 +164,7 @@
 (defmethod mutate 'day/assign
   [{:keys [state]} _ {:keys [assignee date] :as params}]
   (if (not-any? #(= date (:day/by-date %)) (:days @state))
-    {:value {:days/by-date [date]}
+    {:value {:days/by-date date}
      :action
             (fn []
               (swap! state add-assignment-to-calendar (str date) assignee))}
@@ -170,10 +172,9 @@
 
 (defmethod mutate 'day/release
   [{:keys [state]} _ {:keys [assignee date] :as params}]
-  (println "releasing " date " requested by " assignee)
   (if-let [day (get-in @state [:days/by-date date])]
-    (if (= (:person/by-id day) assignee)
-      {:value {:day/by-date [:name]}
+    (if (= (second day) assignee)
+      {:value {:days/by-date date}
        :action
               (fn []
                 (swap! state release-day (str date)))}
@@ -181,30 +182,41 @@
     {:value {:error "Cananot release this day - it is not assigned"}}))
 
 (defmethod mutate 'month/next
-  [[{:keys [state]}] _ _]
+  [{:keys [state]} _ _]
+  (println "changing to next month")
   (let [st @state
-        new-month (next-month (:month-id st))
+        new-month (next-month (:month/month-id st))
         month (t/month new-month)
         year  (t/year new-month)]
+    (println "in next month " new-month month year)
     {:value  {:month/month-id (date-key new-month)}
      :action (fn []
-               (swap! state (assoc :month-id new-month :month (six-weeks-containing-month year month))))}))
+               (swap! state assoc :month/month-id new-month :month (six-weeks-containing-month year month)))}))
 
 (defmethod mutate 'month/previous
   [{:keys [state]} _ _]
   (let [st @state
-        new-month (last-month (:month-id st))
+        new-month (last-month (:month/month-id st))
         month (t/month new-month)
         year  (t/year new-month)]
     {:value  {:month/month-id (date-key new-month)}
      :action (fn []
-               (swap! state (assoc :month-id new-month :month (six-weeks-containing-month year month))))}))
+               (swap! state (assoc :month/month-id new-month :month (six-weeks-containing-month year month))))}))
 
+;(defn assign-day [assignee date]
+;  "assign a day to a user"
+;  (om/transact! reconciler '[(day/release {:assignee 2 :date 20151112})]))
+;
+;(defn release-a-day [assignee date]
+;  "release a day owner by a user"
+;  (om.next/transact! reconciler '[(day/assign {:date 20151112 :assignee 2})]))
+
+;; need to add click listeners, remove if owner by this user, none if owner by other user, assign if available
 (defui Day
        static om/Ident
-       (ident [this {:keys [day/day-id]}]
-              (println "Day Ident " date-key this)
-              [:day/by-date date-key])
+       (ident [this {:keys [day/by-date]}]
+              (println "Day Ident " by-date this)
+              [:days/by-date by-date])
        static om/IQuery
        (query [this]
               '[:day/day-id :date])
@@ -234,6 +246,10 @@
        static om/IQuery
        (query [this]
               '[:month/month-id])
+       static om/Ident
+       (ident [this props]
+              (println "month header ident " this props)
+              [:month/month-id props])
        Object
        (render [this]
                (println "rendering month header" (om/props this))
@@ -262,14 +278,15 @@
 (defui Month
        static om/IQuery
        (query [this]
-             [:month/weeks (om/get-query Month-header) (om/get-query Day)])
+             [:month/weeks {:month/month-id (om/get-query Month-header)}])
        Object
        (render [this]
                (println "rendering month " (keys (om/props this)))
                (println (:months/weeks (om/props this)))
+               (println "month ID " (:month/month-id (om/props this)))
                (println (om/props this))
                (dom/div #js {:className "month"}
-                        (month-header (:month/month-id this))
+                        (month-header (:month/month-id (om/props this)))
                         (month-body (om/props this)))))
 
 (def reconciler

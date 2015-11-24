@@ -12,6 +12,8 @@
                 :asset-path "js"
                 :output-to "resources/public/js/main.js"
                 :output-dir "resources/public/js"
+                :optimizations: :none
+                :source-map true
                 :verbose true}}]})
 
 (ra/cljs-repl)
