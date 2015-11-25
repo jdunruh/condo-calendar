@@ -93,7 +93,7 @@
                  :month/month-id (t/date-time year month 1)
                  :month (six-weeks-containing-month year month)
                  :days/by-date {}
-                 :current-user [:person/by-id 2]}))
+                 :current-user 2}))
 
 (defn date-to-assignment [state date]
   (get-in state (get-in state [:days/by-date date] [nil]) {:name "available" :color "white"}))
@@ -161,13 +161,31 @@
 
 (defmulti mutate om/dispatch)
 
+(defmethod mutate 'day/change-state
+  [{:keys [state]} _ {:keys [date] :as params}]
+  (let [st @state]
+    (println (get-in st [:days/by-date (str date)]))
+       (if-let [day-assignee (get-in st [:days/by-date (str date)])]
+         (do (println "in if-let true branch")
+             (if (= (second day-assignee) (:current-user st)) ; the date is assigned
+               {:value {:days/by-date date}                 ; it is assigned to the current user - so release
+                :action
+                       (fn []
+                         (swap! state release-day (str date)))}
+               {:value {:error "Cannot release someone else's day"}})) ; the date is assigned to someone else - user error
+         (do (println "in if-let false branch") {:value {:days/by-date date} ; the date is not assigned - so assign
+                                                 :action
+                                                        (fn []
+                                                          (swap! state add-assignment-to-calendar (str date) (:current-user st)))})
+         )))
+
 (defmethod mutate 'day/assign
-  [{:keys [state]} _ {:keys [assignee date] :as params}]
+  [{:keys [state]} _ {:keys [date] :as params}]
   (if (not-any? #(= date (:day/by-date %)) (:days @state))
     {:value {:days/by-date date}
      :action
             (fn []
-              (swap! state add-assignment-to-calendar (str date) assignee))}
+              (swap! state add-assignment-to-calendar (str date) (:current-user @state)))}
     {:value {:error (str "Attempt to assign a day that is already assigned " date)}}))
 
 (defmethod mutate 'day/release
@@ -203,13 +221,12 @@
      :action (fn []
                (swap! state assoc :month/month-id new-month :month (six-weeks-containing-month year month)))}))
 
-;(defn assign-day [assignee date]
-;  "assign a day to a user"
-;  (om/transact! reconciler '[(day/release {:assignee 2 :date 20151112})]))
-;
-;(defn release-a-day [assignee date]
-;  "release a day owner by a user"
-;  (om.next/transact! reconciler '[(day/assign {:date 20151112 :assignee 2})]))
+
+(def reconciler
+  (om/reconciler
+    {:state  (atom init-data)
+     :parser (om/parser {:read read :mutate mutate})}))
+
 
 ;; need to add click listeners, remove if owner by this user, none if owner by other user, assign if available
 (defui Day
@@ -226,7 +243,15 @@
                (let [day (:date (om/props this))
                      color (:color (om/props this))
                      name (:name (om/props this))]
-                 (dom/div #js{:className (str "day " color)}
+                 (dom/div #js{:className (str "day " color)
+                              :onMouseDown
+                                         (fn [e]
+                                           (println "about to assign from MouseDown " (date-key day))
+                                           (om/transact! reconciler `[(day/assign {:date ~(date-key day)})]))
+                              :onMouseOver
+                                (fn [e] (println "mouse over event fires for " (date-key day)))
+                              :onMouseUp
+                                (fn [e] (println "mouse up over " (date-key day)))}
                           (dom/div #js {:className "day-no"} (t/day day))
                           (dom/span #js {:className "day-name"} name)
                           ))))
@@ -255,9 +280,15 @@
                (println "rendering month header" (om/props this))
                (let [month-id (om/props this)]
                  (dom/div #js {:className "month-header"}
-                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-left fa-2x"}))
+                          (dom/button #js {:className "change-month"
+                                           :onClick
+                                            (fn [e] (om/transact! reconciler '[(month/previous)] ))}
+                                      (dom/i #js {:className "fa fa-chevron-left fa-2x"}))
                           (cf/unparse (cf/formatter "MMMM YYYY") (t/date-time month-id))
-                          (dom/button #js {:className "change-month"} (dom/i #js {:className "fa fa-chevron-right fa-2x"}))))))
+                          (dom/button #js {:className "change-month"
+                                           :onClick
+                                            (fn [e] (om/transact! reconciler '[(month/next)]))}
+                                      (dom/i #js {:className "fa fa-chevron-right fa-2x"}))))))
 
 
 (def month-header (om/factory Month-header))
@@ -288,11 +319,5 @@
                (dom/div #js {:className "month"}
                         (month-header (:month/month-id (om/props this)))
                         (month-body (om/props this)))))
-
-(def reconciler
-  (om/reconciler
-    {:state  (atom init-data)
-     :parser (om/parser {:read read :mutate mutate})}))
-
 (om/add-root! reconciler
              Month (gdom/getElement "app"))
