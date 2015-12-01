@@ -1,4 +1,6 @@
-
+body {
+    background-color: lightgray;
+}
 .month {
     margin-bottom: 50px;
 }
@@ -62,6 +64,16 @@
     padding-right: 3px;
     margin-bottom: 15px;
 }
+
+.change-month:focus {
+    outline: none;
+}
+
+.month-year {
+    display: inline-block;
+    width: 210px;
+}
+
 
 .change-month i {
     vertical-align: 2px;
